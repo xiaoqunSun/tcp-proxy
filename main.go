@@ -6,19 +6,24 @@ import (
 	"os"
 )
 
-func forward(conFrom, conTo net.Conn) {
+type proxy struct {
+	id              int64
+	client, backend net.Conn
+}
+
+func forward(conFrom, conTo net.Conn, uid int64) {
 	for {
 		buff := make([]byte, 4096, 4096)
 		n, err := conFrom.Read(buff)
 		if err != nil {
-			fmt.Println("con read fail", err)
+			fmt.Printf("[%d-%s] read fail:%s\n", uid, conFrom.RemoteAddr(), err.Error())
 			conFrom.Close()
 			conTo.Close()
 			return
 		}
 		_, err = conTo.Write(buff[:n])
 		if err != nil {
-			fmt.Println("con write fail", err)
+			fmt.Printf("[%d-%s] write fail:%s\n", uid, conFrom.RemoteAddr(), uid, err.Error())
 			conFrom.Close()
 			conTo.Close()
 			return
@@ -44,16 +49,22 @@ func main() {
 			fmt.Println("Accept fail", err)
 			break
 		}
-		go func(client net.Conn) {
+		var uid int64
+		uid = 1
+		go func(client net.Conn, uid int64) {
 			proxy, err := net.Dial("tcp", serveraddr)
+
 			if err == nil {
-				fmt.Printf("new client:[%s] connected\n", client.RemoteAddr())
-				go forward(client, proxy)
-				go forward(proxy, client)
+				fmt.Printf("new client:[%d-%s] connected\n", uid, client.RemoteAddr())
+				go forward(client, proxy, uid)
+				go forward(proxy, client, uid)
+
 			} else {
 				fmt.Println("connect to [%s] fail", serveraddr, err)
 				client.Close()
 			}
-		}(client)
+
+		}(client, uid)
+		uid++
 	}
 }
